@@ -186,11 +186,11 @@ class InstallStatus(enum.Enum):
     Options are artificially disjoint for display purposes
     """
 
-    installed = "@g{[+]}  "
-    upstream = "@g{[^]}  "
-    external = "@g{[e]}  "
-    absent = "@K{ - }  "
-    missing = "@r{[-]}  "
+    installed = "@g{[+]}"
+    upstream = "@g{[^]}"
+    external = "@g{[e]}"
+    absent = "@K{ - }"
+    missing = "@r{[-]}"
 
 
 def colorize_spec(spec):
@@ -4319,8 +4319,7 @@ class Spec:
         return colorize_spec(self)
 
     def format(self, format_string=DEFAULT_FORMAT, **kwargs):
-        r"""Prints out particular pieces of a spec, depending on what is
-        in the format string.
+        r"""Prints out particular pieces of a spec, depending on what is in the format string.
 
         Using the ``{attribute}`` syntax, any field of the spec can be
         selected.  Those attributes can be recursive. For example,
@@ -4446,6 +4445,9 @@ class Spec:
             elif attribute == "spack_install":
                 write(morph(spec, spack.store.STORE.layout.root))
                 return
+            elif re.match(r"install_status", attribute):
+                write(self.install_status_symbol())
+                return
             elif re.match(r"hash(:\d)?", attribute):
                 col = "#"
                 if ":" in attribute:
@@ -4540,8 +4542,18 @@ class Spec:
                 "Format string terminated while reading attribute." "Missing terminating }."
             )
 
+        # remove leading whitespace from directives that add it for internal formatting.
+        # Arch, compiler flags, and variants add spaces for spec format correctness, but
+        # we don't really want them in formatted string output. We do want to preserve
+        # whitespace from the format string.
         formatted_spec = out.getvalue()
-        return formatted_spec.strip()
+        whitespace_attrs = [r"{arch=[^}]*}", r"{architecture}", r"{compiler_flags}", r"{variants}"]
+        if any(re.match(rx, format_string) for rx in whitespace_attrs):
+            formatted_spec = formatted_spec.lstrip()
+        if any(re.search(f"{rx}$", format_string) for rx in whitespace_attrs):
+            formatted_spec = formatted_spec.rstrip()
+
+        return formatted_spec
 
     def cformat(self, *args, **kwargs):
         """Same as format, but color defaults to auto instead of False."""
@@ -4626,6 +4638,11 @@ class Spec:
         else:
             return InstallStatus.missing
 
+    def install_status_symbol(self):
+        """Get an install status symbol."""
+        status = self.install_status()
+        return clr.colorize(status.value)
+
     def _installed_explicitly(self):
         """Helper for tree to print DB install status."""
         if not self.concrete:
@@ -4650,7 +4667,7 @@ class Spec:
         show_types: bool = False,
         depth_first: bool = False,
         recurse_dependencies: bool = True,
-        status_fn: Optional[Callable[["Spec"], InstallStatus]] = None,
+        install_status: bool = False,
         prefix: Optional[Callable[["Spec"], str]] = None,
     ) -> str:
         """Prints out this spec and its dependencies, tree-formatted
@@ -4671,8 +4688,7 @@ class Spec:
             show_types: if True, show the (merged) dependency type of a node
             depth_first: if True, traverse the DAG depth first when representing it as a tree
             recurse_dependencies: if True, recurse on dependencies
-            status_fn: optional callable that takes a node as an argument and return its
-                installation status
+            install_status: if True, show installation status next to each spec
             prefix: optional callable that takes a node as an argument and return its
                 installation prefix
         """
@@ -4686,21 +4702,15 @@ class Spec:
         ):
             node = dep_spec.spec
 
+            if install_status:
+                out += node.format("{install_status}  ")
+
             if prefix is not None:
                 out += prefix(node)
             out += " " * indent
 
             if depth:
                 out += "%-4d" % d
-
-            if status_fn:
-                status = status_fn(node)
-                if status in list(InstallStatus):
-                    out += clr.colorize(status.value, color=color)
-                elif status:
-                    out += clr.colorize("@g{[+]}  ", color=color)
-                else:
-                    out += clr.colorize("@r{[-]}  ", color=color)
 
             if hashes:
                 out += clr.colorize("@K{%s}  ", color=color) % node.dag_hash(hashlen)
