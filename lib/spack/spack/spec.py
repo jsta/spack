@@ -3362,6 +3362,14 @@ class Spec:
 
         while changed:
             changed = False
+
+            from pprint import pprint
+
+            print()
+            print("ME:", self.name)
+            pprint(self.package_class.dependencies)
+            print(list(self.package_class.dependency_names()))
+
             for dep_name in self.package_class.dependency_names():
                 # Do we depend on dep_name?  If so pkg_dep is not None.
                 dep = self._evaluate_dependency_conditions(dep_name)
@@ -3381,6 +3389,7 @@ class Spec:
                         changed |= self._merge_dependency(
                             dep, visited, spec_deps, provider_index, tests
                         )
+                print(changed)
             any_change |= changed
 
         return any_change
